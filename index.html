@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tells — Scam Message Triage</title>
+<meta name="description" content="Paste a suspicious message and see its risk rating, the red flags it contains and a plain-English explanation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0f14; --panel:#121821; --panel-2:#18202b; --line:#243042; --ink:#e8edf3; --ink-2:#9fb0c3; --ink-3:#6b7d92;
+  --accent:#ffb020; --low:#2fbf71; --caution:#f2c94c; --high:#ff8a3d; --critical:#ff4d5e;
+  --c-credentials:#ff6b8b; --c-payment_redirect:#ff8a3d; --c-odd_payment:#f2c94c; --c-link:#5ab0ff;
+  --c-urgency:#c084fc; --c-threat:#ff4d5e; --c-impersonation:#38d0c8; --c-too_good:#a3e635; --c-rapport:#f472b6; --c-secrecy:#94a3b8;
+  --radius:14px; --mono:"JetBrains Mono",ui-monospace,"DejaVu Sans Mono",monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f5f3ee; --panel:#ffffff; --panel-2:#f8f7f3; --line:#e2ded4; --ink:#141a22; --ink-2:#4a5767; --ink-3:#7a8696;
+    --accent:#c77a00; --low:#14975a; --caution:#b58900; --high:#d9631a; --critical:#d7263d;
+    --c-credentials:#d6336c; --c-payment_redirect:#d9631a; --c-odd_payment:#b58900; --c-link:#1c7ed6;
+    --c-urgency:#7c3aed; --c-threat:#d7263d; --c-impersonation:#0f9a92; --c-too_good:#5c940d; --c-rapport:#c2255c; --c-secrecy:#5f6b7a;
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#f5f3ee; --panel:#ffffff; --panel-2:#f8f7f3; --line:#e2ded4; --ink:#141a22; --ink-2:#4a5767; --ink-3:#7a8696;
+  --accent:#c77a00; --low:#14975a; --caution:#b58900; --high:#d9631a; --critical:#d7263d;
+  --c-credentials:#d6336c; --c-payment_redirect:#d9631a; --c-odd_payment:#b58900; --c-link:#1c7ed6;
+  --c-urgency:#7c3aed; --c-threat:#d7263d; --c-impersonation:#0f9a92; --c-too_good:#5c940d; --c-rapport:#c2255c; --c-secrecy:#5f6b7a;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+.wrap{max-width:1240px;margin:0 auto;padding:22px 24px 48px}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--accent);display:grid;place-items:center;color:#111;font-weight:800;font-size:18px}
+.brand h1{font-size:19px;margin:0;letter-spacing:-.01em}
+.brand p{margin:0;color:var(--ink-3);font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12px;color:var(--ink-2);background:var(--panel)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--low)}
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:18px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.label{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px}
+textarea{width:100%;min-height:250px;resize:vertical;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:14px;font:14px/1.6 var(--mono)}
+textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.samples{display:flex;flex-wrap:wrap;gap:7px;margin:14px 0 4px}
+.samples button{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;color:var(--ink-2);transition:.15s}
+.samples button:hover,.samples button.on{border-color:var(--accent);color:var(--ink)}
+.samples button .tag{font-size:10px;margin-left:5px;color:var(--ink-3)}
+.actions{display:flex;gap:10px;align-items:center;margin-top:14px}
+.go{background:var(--accent);color:#111;border:0;border-radius:10px;padding:11px 20px;font-weight:700;font-size:14.5px;transition:transform .1s}
+.go:active{transform:scale(.97)}
+.ghost{background:none;border:1px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink-2);font-size:13.5px}
+.hint{color:var(--ink-3);font-size:12px;margin-left:auto}
+.note{display:flex;gap:10px;margin-top:16px;padding:12px 14px;border-radius:10px;background:var(--panel-2);border:1px dashed var(--line);font-size:12.5px;color:var(--ink-2)}
+.note b{color:var(--ink)}
+
+/* results */
+.empty{min-height:420px;display:grid;place-items:center;text-align:center;color:var(--ink-3)}
+.empty .big{font-size:42px;margin-bottom:6px;opacity:.6}
+.top{display:flex;gap:20px;align-items:center}
+.gauge{position:relative;width:136px;height:136px;flex:none}
+.gauge svg{transform:rotate(-90deg)}
+.gauge .num{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+.gauge .num b{font-size:38px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.gauge .num small{display:block;font-size:10px;color:var(--ink-3);letter-spacing:.1em;text-transform:uppercase;margin-top:3px}
+.rating{display:inline-block;font-weight:800;font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:5px 11px;border-radius:7px;color:#111}
+.archetype{font-size:17px;font-weight:700;margin:8px 0 4px;letter-spacing:-.01em;line-height:1.3}
+.summary{color:var(--ink-2);margin:0;font-size:14px}
+.sec{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.flags{display:grid;gap:9px}
+.flag{border:1px solid var(--line);border-left:4px solid var(--fc);border-radius:10px;padding:11px 13px;background:var(--panel-2);opacity:0;transform:translateY(6px);animation:in .35s forwards}
+.flag:hover{border-color:var(--fc)}
+.flag .hd{display:flex;justify-content:space-between;gap:10px;font-weight:650;font-size:14px}
+.flag .pts{font:600 12px var(--mono);color:var(--fc);white-space:nowrap}
+.flag .why{font-size:13px;color:var(--ink-2);margin:5px 0 0}
+.ev{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ev span{font:12px var(--mono);padding:2px 7px;border-radius:5px;background:color-mix(in srgb,var(--fc) 16%,transparent);color:var(--ink)}
+.ev em{font-style:normal;font-size:12px;color:var(--ink-3)}
+@keyframes in{to{opacity:1;transform:none}}
+.msg{font:13px/1.7 var(--mono);white-space:pre-wrap;word-break:break-word;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;color:var(--ink-2)}
+mark.hl{background:color-mix(in srgb,var(--fc) 24%,transparent);color:var(--ink);border-bottom:2px solid var(--fc);border-radius:3px;padding:0 1px;transition:.15s}
+mark.hl.dim{opacity:.35}
+.adj{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:13px;color:var(--ink-2)}
+.adj li{display:flex;gap:8px}
+.adj .ar{font-weight:800;width:14px;flex:none}
+.adj .up{color:var(--critical)} .adj .down{color:var(--low)}
+ol.steps{margin:0;padding-left:20px;display:grid;gap:5px;font-size:13.5px;color:var(--ink-2)}
+.grammar{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--ink-3)}
+.grammar i{font-style:normal;border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--ink-2)}
+details{margin-top:22px}
+summary{cursor:pointer;color:var(--ink-2);font-weight:600}
+.how{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:12px}
+.how div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13.5px;color:var(--ink-2)}
+.how b{display:block;color:var(--ink);margin-bottom:4px}
+footer{margin-top:18px;color:var(--ink-3);font-size:12px}
+@media (max-width:900px){
+  .wrap{padding:16px 16px 40px}
+  .grid,.how{grid-template-columns:1fr}
+  .top{flex-direction:column;align-items:flex-start}
+  .hint{display:none}
+  header .chip{display:none}
+}
+@media (prefers-reduced-motion:reduce){.flag{animation:none;opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true">T</div>
+      <div><h1>Tells</h1><p>Scam message triage: what does this message want from you?</p></div>
+    </div>
+    <span class="chip"><span class="dot"></span>Runs in your browser. Nothing is sent anywhere.</span>
+  </header>
+
+  <div class="grid">
+    <section class="card" aria-label="Message input">
+      <p class="label">Suspicious message</p>
+      <textarea id="msg" placeholder="Paste a text, email or DM here…" spellcheck="false"></textarea>
+      <div class="samples" id="samples" aria-label="Try a sample"></div>
+      <div class="actions">
+        <button class="go" id="go">Analyze message</button>
+        <button class="ghost" id="clear">Clear</button>
+        <span class="hint">Ctrl + Enter</span>
+      </div>
+      <div class="note"><span aria-hidden="true">✍️</span><span><b>Grammar-blind by design.</b> AI-written scams have no typos, so Tells ignores spelling and scores what a message <em>asks you to do</em> and how it pressures you.</span></div>
+    </section>
+
+    <section class="card" id="out" aria-live="polite">
+      <div class="empty"><div><div class="big">🔎</div>Paste a message or pick a sample,<br>then hit <b>Analyze</b>.</div></div>
+    </section>
+  </div>
+
+  <details>
+    <summary>How Tells decides (design notes)</summary>
+    <div class="how">
+      <div><b>Asks + pressure = risk</b>Each signal is either an <em>ask</em> (money, codes, a link) or <em>pressure</em> (deadlines, threats, authority, secrecy). Pressure alone is capped at 30, because "ASAP" and "urgent" are normal in real life.</div>
+      <div><b>Explain, don't just score</b>Every point is tied to a flag, every flag shows the exact words that triggered it, and the message is highlighted in place. A number nobody can question is a number nobody can learn from.</div>
+      <div><b>Known patterns get a floor</b>Invoice redirects, gift card requests, code theft, delivery texts and "wrong number" openers are recognized as patterns, so a scam with no ask yet (like a pig butchering opener) still gets flagged.</div>
+    </div>
+  </details>
+  <footer>Tells is an educational triage aid, not a guarantee. When in doubt, contact the sender through a channel you already trust. Report scams at reportfraud.ftc.gov.</footer>
+</div>
+
+<script src="engine.js"></script>
+<script src="samples.js"></script>
+<script>
+(function(){
+  const $ = (s) => document.querySelector(s);
+  const ta = $("#msg"), out = $("#out");
+  const COLORS = { Low:"var(--low)", Caution:"var(--caution)", High:"var(--high)", Critical:"var(--critical)" };
+
+  const sbox = $("#samples");
+  TellsSamples.forEach((s) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.dataset.id = s.id;
+    b.innerHTML = s.label;
+    b.onclick = () => { ta.value = s.text; [...sbox.children].forEach(c=>c.classList.toggle("on", c===b)); run(); };
+    sbox.appendChild(b);
+  });
+
+  $("#go").onclick = run;
+  $("#clear").onclick = () => { ta.value = ""; [...sbox.children].forEach(c=>c.classList.remove("on")); out.innerHTML = $("#out").dataset.empty || out.innerHTML; ta.focus(); };
+  out.dataset.empty = out.innerHTML;
+  ta.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") run(); });
+  ta.addEventListener("input", () => [...sbox.children].forEach(c=>c.classList.remove("on")));
+
+  function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+  function run(){
+    const text = ta.value.trim();
+    if (!text){ ta.focus(); return; }
+    const r = Tells.analyze(text);
+    const col = COLORS[r.rating];
+    const C = 2 * Math.PI * 58;
+
+    const flagsHtml = r.flags.length ? r.flags.map((f, i) => `
+      <div class="flag" data-flag="${f.id}" style="--fc:var(--c-${f.id});animation-delay:${0.25 + i*0.09}s">
+        <div class="hd"><span>${esc(f.label)}</span><span class="pts">+${f.points}</span></div>
+        <div class="ev">${f.evidence.slice(0,4).map(e=>`<span>“${esc(e.length>48?e.slice(0,46)+"…":e)}”</span>`).join("")}${f.notes.length?`<em>${esc(f.notes[0])}</em>`:""}</div>
+        <p class="why">${esc(f.why)}</p>
+      </div>`).join("") : `<p class="summary">No red flags found.</p>`;
+
+    const adj = r.adjustments.length ? `
+      <div class="sec"><p class="label">Score adjustments</p><ul class="adj">${
+        r.adjustments.map(a=>`<li><span class="ar ${a.type}">${a.type==="up"?"↑":"↓"}</span><span>${esc(a.text)}</span></li>`).join("")
+      }</ul></div>` : "";
+
+    const whyNot = (r.rating === "Low" || r.rating === "Caution") && r.missing.length ? `
+      <div class="sec"><p class="label">Why it isn't rated higher</p><p class="summary">There's ${r.missing.join(", ")}. Scams almost always want one of these.</p></div>` : "";
+
+    out.innerHTML = `
+      <div class="top">
+        <div class="gauge" role="img" aria-label="Risk score ${r.score} out of 100">
+          <svg width="136" height="136" viewBox="0 0 136 136">
+            <circle cx="68" cy="68" r="58" fill="none" stroke="var(--line)" stroke-width="11"/>
+            <circle id="arc" cx="68" cy="68" r="58" fill="none" stroke="${col}" stroke-width="11" stroke-linecap="round"
+              stroke-dasharray="${C}" stroke-dashoffset="${C}" style="transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1)"/>
+          </svg>
+          <div class="num"><div><b id="n">0</b><small>risk / 100</small></div></div>
+        </div>
+        <div>
+          <span class="rating" style="background:${col}">${r.rating} risk</span>
+          <div class="archetype">${esc(r.archetype || (r.rating==="Low" ? "No scam pattern detected" : "Suspicious message"))}</div>
+          <p class="summary">${esc(r.summary)}</p>
+          <div class="grammar"><i>Aa</i> Grammar ignored: scored on intent, not typos</div>
+        </div>
+      </div>
+      <div class="sec"><p class="label">${r.rating==="Low"?"Signals found":"Red flags"} (${r.flags.length})</p><div class="flags">${flagsHtml}</div></div>
+      ${whyNot}
+      <div class="sec"><p class="label">Evidence in context</p><div class="msg" id="hl">${Tells.highlight(text, r.spans)}</div></div>
+      ${adj}
+      <div class="sec"><p class="label">What to do</p><ol class="steps">${r.steps.map(s=>`<li>${esc(s)}</li>`).join("")}</ol></div>`;
+
+    out.querySelectorAll("mark.hl").forEach(m => m.style.setProperty("--fc", `var(--c-${m.dataset.flag})`));
+    out.querySelectorAll(".flag").forEach(f => {
+      f.addEventListener("mouseenter", () => out.querySelectorAll("mark.hl").forEach(m => m.classList.toggle("dim", m.dataset.flag !== f.dataset.flag)));
+      f.addEventListener("mouseleave", () => out.querySelectorAll("mark.hl").forEach(m => m.classList.remove("dim")));
+    });
+
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      $("#arc").style.strokeDashoffset = C * (1 - r.score / 100);
+    }));
+    const n = $("#n"), t0 = performance.now(), D = 900;
+    (function tick(t){ const p = Math.min(1, (t - t0) / D); n.textContent = Math.round(r.score * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(tick); })(t0);
+    if (window.innerWidth <= 900) out.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+})();
+</script>
+</body>
+</html>

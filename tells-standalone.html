@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tells — Scam Message Triage</title>
+<meta name="description" content="Paste a suspicious message and see its risk rating, the red flags it contains and a plain-English explanation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0f14; --panel:#121821; --panel-2:#18202b; --line:#243042; --ink:#e8edf3; --ink-2:#9fb0c3; --ink-3:#6b7d92;
+  --accent:#ffb020; --low:#2fbf71; --caution:#f2c94c; --high:#ff8a3d; --critical:#ff4d5e;
+  --c-credentials:#ff6b8b; --c-payment_redirect:#ff8a3d; --c-odd_payment:#f2c94c; --c-link:#5ab0ff;
+  --c-urgency:#c084fc; --c-threat:#ff4d5e; --c-impersonation:#38d0c8; --c-too_good:#a3e635; --c-rapport:#f472b6; --c-secrecy:#94a3b8;
+  --radius:14px; --mono:"JetBrains Mono",ui-monospace,"DejaVu Sans Mono",monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f5f3ee; --panel:#ffffff; --panel-2:#f8f7f3; --line:#e2ded4; --ink:#141a22; --ink-2:#4a5767; --ink-3:#7a8696;
+    --accent:#c77a00; --low:#14975a; --caution:#b58900; --high:#d9631a; --critical:#d7263d;
+    --c-credentials:#d6336c; --c-payment_redirect:#d9631a; --c-odd_payment:#b58900; --c-link:#1c7ed6;
+    --c-urgency:#7c3aed; --c-threat:#d7263d; --c-impersonation:#0f9a92; --c-too_good:#5c940d; --c-rapport:#c2255c; --c-secrecy:#5f6b7a;
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#f5f3ee; --panel:#ffffff; --panel-2:#f8f7f3; --line:#e2ded4; --ink:#141a22; --ink-2:#4a5767; --ink-3:#7a8696;
+  --accent:#c77a00; --low:#14975a; --caution:#b58900; --high:#d9631a; --critical:#d7263d;
+  --c-credentials:#d6336c; --c-payment_redirect:#d9631a; --c-odd_payment:#b58900; --c-link:#1c7ed6;
+  --c-urgency:#7c3aed; --c-threat:#d7263d; --c-impersonation:#0f9a92; --c-too_good:#5c940d; --c-rapport:#c2255c; --c-secrecy:#5f6b7a;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+.wrap{max-width:1240px;margin:0 auto;padding:22px 24px 48px}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--accent);display:grid;place-items:center;color:#111;font-weight:800;font-size:18px}
+.brand h1{font-size:19px;margin:0;letter-spacing:-.01em}
+.brand p{margin:0;color:var(--ink-3);font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12px;color:var(--ink-2);background:var(--panel)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--low)}
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:18px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.label{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px}
+textarea{width:100%;min-height:250px;resize:vertical;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:14px;font:14px/1.6 var(--mono)}
+textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.samples{display:flex;flex-wrap:wrap;gap:7px;margin:14px 0 4px}
+.samples button{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;color:var(--ink-2);transition:.15s}
+.samples button:hover,.samples button.on{border-color:var(--accent);color:var(--ink)}
+.samples button .tag{font-size:10px;margin-left:5px;color:var(--ink-3)}
+.actions{display:flex;gap:10px;align-items:center;margin-top:14px}
+.go{background:var(--accent);color:#111;border:0;border-radius:10px;padding:11px 20px;font-weight:700;font-size:14.5px;transition:transform .1s}
+.go:active{transform:scale(.97)}
+.ghost{background:none;border:1px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink-2);font-size:13.5px}
+.hint{color:var(--ink-3);font-size:12px;margin-left:auto}
+.note{display:flex;gap:10px;margin-top:16px;padding:12px 14px;border-radius:10px;background:var(--panel-2);border:1px dashed var(--line);font-size:12.5px;color:var(--ink-2)}
+.note b{color:var(--ink)}
+
+/* results */
+.empty{min-height:420px;display:grid;place-items:center;text-align:center;color:var(--ink-3)}
+.empty .big{font-size:42px;margin-bottom:6px;opacity:.6}
+.top{display:flex;gap:20px;align-items:center}
+.gauge{position:relative;width:136px;height:136px;flex:none}
+.gauge svg{transform:rotate(-90deg)}
+.gauge .num{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+.gauge .num b{font-size:38px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.gauge .num small{display:block;font-size:10px;color:var(--ink-3);letter-spacing:.1em;text-transform:uppercase;margin-top:3px}
+.rating{display:inline-block;font-weight:800;font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:5px 11px;border-radius:7px;color:#111}
+.archetype{font-size:17px;font-weight:700;margin:8px 0 4px;letter-spacing:-.01em;line-height:1.3}
+.summary{color:var(--ink-2);margin:0;font-size:14px}
+.sec{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.flags{display:grid;gap:9px}
+.flag{border:1px solid var(--line);border-left:4px solid var(--fc);border-radius:10px;padding:11px 13px;background:var(--panel-2);opacity:0;transform:translateY(6px);animation:in .35s forwards}
+.flag:hover{border-color:var(--fc)}
+.flag .hd{display:flex;justify-content:space-between;gap:10px;font-weight:650;font-size:14px}
+.flag .pts{font:600 12px var(--mono);color:var(--fc);white-space:nowrap}
+.flag .why{font-size:13px;color:var(--ink-2);margin:5px 0 0}
+.ev{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ev span{font:12px var(--mono);padding:2px 7px;border-radius:5px;background:color-mix(in srgb,var(--fc) 16%,transparent);color:var(--ink)}
+.ev em{font-style:normal;font-size:12px;color:var(--ink-3)}
+@keyframes in{to{opacity:1;transform:none}}
+.msg{font:13px/1.7 var(--mono);white-space:pre-wrap;word-break:break-word;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;color:var(--ink-2)}
+mark.hl{background:color-mix(in srgb,var(--fc) 24%,transparent);color:var(--ink);border-bottom:2px solid var(--fc);border-radius:3px;padding:0 1px;transition:.15s}
+mark.hl.dim{opacity:.35}
+.adj{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:13px;color:var(--ink-2)}
+.adj li{display:flex;gap:8px}
+.adj .ar{font-weight:800;width:14px;flex:none}
+.adj .up{color:var(--critical)} .adj .down{color:var(--low)}
+ol.steps{margin:0;padding-left:20px;display:grid;gap:5px;font-size:13.5px;color:var(--ink-2)}
+.grammar{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--ink-3)}
+.grammar i{font-style:normal;border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--ink-2)}
+details{margin-top:22px}
+summary{cursor:pointer;color:var(--ink-2);font-weight:600}
+.how{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:12px}
+.how div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13.5px;color:var(--ink-2)}
+.how b{display:block;color:var(--ink);margin-bottom:4px}
+footer{margin-top:18px;color:var(--ink-3);font-size:12px}
+@media (max-width:900px){
+  .wrap{padding:16px 16px 40px}
+  .grid,.how{grid-template-columns:1fr}
+  .top{flex-direction:column;align-items:flex-start}
+  .hint{display:none}
+  header .chip{display:none}
+}
+@media (prefers-reduced-motion:reduce){.flag{animation:none;opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true">T</div>
+      <div><h1>Tells</h1><p>Scam message triage: what does this message want from you?</p></div>
+    </div>
+    <span class="chip"><span class="dot"></span>Runs in your browser. Nothing is sent anywhere.</span>
+  </header>
+
+  <div class="grid">
+    <section class="card" aria-label="Message input">
+      <p class="label">Suspicious message</p>
+      <textarea id="msg" placeholder="Paste a text, email or DM here…" spellcheck="false"></textarea>
+      <div class="samples" id="samples" aria-label="Try a sample"></div>
+      <div class="actions">
+        <button class="go" id="go">Analyze message</button>
+        <button class="ghost" id="clear">Clear</button>
+        <span class="hint">Ctrl + Enter</span>
+      </div>
+      <div class="note"><span aria-hidden="true">✍️</span><span><b>Grammar-blind by design.</b> AI-written scams have no typos, so Tells ignores spelling and scores what a message <em>asks you to do</em> and how it pressures you.</span></div>
+    </section>
+
+    <section class="card" id="out" aria-live="polite">
+      <div class="empty"><div><div class="big">🔎</div>Paste a message or pick a sample,<br>then hit <b>Analyze</b>.</div></div>
+    </section>
+  </div>
+
+  <details>
+    <summary>How Tells decides (design notes)</summary>
+    <div class="how">
+      <div><b>Asks + pressure = risk</b>Each signal is either an <em>ask</em> (money, codes, a link) or <em>pressure</em> (deadlines, threats, authority, secrecy). Pressure alone is capped at 30, because "ASAP" and "urgent" are normal in real life.</div>
+      <div><b>Explain, don't just score</b>Every point is tied to a flag, every flag shows the exact words that triggered it, and the message is highlighted in place. A number nobody can question is a number nobody can learn from.</div>
+      <div><b>Known patterns get a floor</b>Invoice redirects, gift card requests, code theft, delivery texts and "wrong number" openers are recognized as patterns, so a scam with no ask yet (like a pig butchering opener) still gets flagged.</div>
+    </div>
+  </details>
+  <footer>Tells is an educational triage aid, not a guarantee. When in doubt, contact the sender through a channel you already trust. Report scams at reportfraud.ftc.gov.</footer>
+</div>
+
+<script>
+/*!
+ * Tells — explainable scam message triage engine
+ * Works in the browser (window.Tells) and in Node (module.exports).
+ *
+ * Design principles
+ *  1. Score intent, not grammar. Nothing here looks at spelling or typos,
+ *     so a perfectly written AI scam is judged the same as a sloppy one.
+ *  2. Risk comes from combinations. Pressure language alone ("ASAP",
+ *     "urgent") is everywhere in normal life. It only becomes risky when it
+ *     is paired with an ASK: send money, share info, or click a link.
+ *  3. Every point of score is traceable to a flag, and every flag shows the
+ *     exact words that triggered it plus a plain-English reason.
+ */
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory();
+  else root.Tells = factory();
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+
+  // kind: "ask"      = the message wants something from you
+  //       "pressure" = the message is pushing you or building a pretext
+  const SIGNALS = [
+    {
+      id: "credentials",
+      label: "Asks for codes, passwords or personal info",
+      kind: "ask",
+      weight: 26,
+      why: "Real banks, employers and delivery services don't ask you to confirm passwords, one-time codes, card numbers or your SSN over text or email.",
+      patterns: [
+        /\b(verify|confirm|validate|update|re-?activate)\s+(your\s+)?(account|identity|information|details|payment(\s+method)?|login|card)\b/gi,
+        /\b(password|passcode|PIN|CVV|security\s+code|social\s+security(\s+number)?|SSN|date\s+of\s+birth|card\s+number|login\s+details|credentials)\b/gi,
+        /\b(send|reply\s+with|read|tell|give)\s+(me\s+|us\s+)?(back\s+)?(the\s+|that\s+|your\s+)?(\d-digit\s+)?(code|verification\s+code|one[- ]time\s+code|OTP)\b/gi,
+        /\b(verification|one[- ]time|OTP)\s+code\b/gi,
+      ],
+    },
+    {
+      id: "payment_redirect",
+      label: "Redirects a payment to new account details",
+      kind: "ask",
+      weight: 28,
+      why: "Changing where money should go — especially by email or text — is the core move of invoice and business email compromise fraud. Always confirm bank changes by calling a number you already have.",
+      patterns: [
+        /\b(our|the|my)\s+(bank(ing)?\s+(details|information|account)?|account\s+details|payment\s+details)\s+(has|have)\s+(changed|been\s+updated)\b/gi,
+        /\b(bank|banking)\s+has\s+changed\b/gi,
+        /\b(new|updated|different)\s+(bank(ing)?\s+)?(account|bank\s+details|payment\s+details|routing|wire\s+instructions)\b/gi,
+        /\b(routing(\s+number)?|account\s*(no\.?|number|#)?|IBAN|SWIFT|sort\s+code)\s*[:#]?\s*\d{4,}/gi,
+        /\b(wire|transfer|remit|send)\s+(the\s+)?(payment|funds|money|invoice|balance)\b/gi,
+      ],
+    },
+    {
+      id: "odd_payment",
+      label: "Wants payment by gift card, crypto or cash app",
+      kind: "ask",
+      weight: 24,
+      why: "Gift cards, crypto and peer-to-peer apps are nearly impossible to reverse. That's why scammers ask for them and legitimate businesses and agencies almost never do.",
+      patterns: [
+        /\b(gift\s*cards?|apple\s+cards?|google\s+play\s+cards?|itunes|steam\s+cards?|amazon\s+cards?)\b/gi,
+        /\b(send|pay|deposit|transfer|buy)\b[^.]{0,40}\b(bitcoin|BTC|USDT|tether|crypto(currency)?|ethereum|ETH)\b/gi,
+        /\b(wallet\s+address|crypto\s+ATM|bitcoin\s+ATM)\b/gi,
+        /\b(zelle|cash\s*app|venmo|western\s+union|moneygram)\b/gi,
+        /\bphotos?\s+of\s+the\s+(codes?|cards?|back)\b/gi,
+      ],
+    },
+    {
+      id: "link",
+      label: "Pushes you to a suspicious link",
+      kind: "ask",
+      weight: 18,
+      why: "The link is where the theft happens. Look-alike domains, link shorteners and odd endings like .top or .info are common in phishing. Go to the company's site yourself instead.",
+      // Links are handled specially in analyze() so we can grade the domain.
+      patterns: [],
+    },
+    {
+      id: "urgency",
+      label: "Creates urgency or a deadline",
+      kind: "pressure",
+      weight: 14,
+      why: "A ticking clock is designed to stop you from pausing to check. On its own it's common, but paired with an ask it's a classic pressure tactic.",
+      patterns: [
+        /\b(urgent(ly)?|immediately|right\s+away|asap|act\s+now|final\s+notice|last\s+chance|expires?\s+(today|soon|tonight)|time[- ]sensitive|today\s+only|before\s+it'?s\s+too\s+late)\b/gi,
+        /\bwithin\s+\d+\s*(hours?|hrs?|minutes?|mins?|days?)\b/gi,
+        /\b(by\s+)?(end\s+of\s+(the\s+)?day|EOD|today)\b(?=[^.]*\b(pay|send|verify|confirm|update|process|wire|transfer|click)\b)/gi,
+      ],
+    },
+    {
+      id: "threat",
+      label: "Threatens a consequence",
+      kind: "pressure",
+      weight: 14,
+      why: "Fear of losing access, money or freedom (suspension, fines, arrest) is used to rush you into acting before you think.",
+      patterns: [
+        /\b(suspend(ed|sion)?|lock(ed)?|frozen|deactivat(ed|ion)|terminat(ed|ion)|closed|disabled|restricted)\b/gi,
+        /\b(legal\s+action|arrest|warrant|lawsuit|penalt(y|ies)|fines?|late\s+fees?|collections)\b/gi,
+        /\b(will\s+be\s+returned|returned\s+to\s+sender)\b/gi,
+        /\b(failure\s+to|if\s+you\s+(do\s+not|don'?t))\s+\w+/gi,
+      ],
+    },
+    {
+      id: "impersonation",
+      label: "Claims to be a trusted company or authority",
+      kind: "pressure",
+      weight: 12,
+      why: "Scammers borrow the trust of banks, government agencies, delivery companies and your own executives. The name in a message proves nothing; verify through a channel you already know.",
+      patterns: [
+        /\b(IRS|social\s+security\s+administration|SSA|medicare|USPS|UPS|FedEx|DHL|amazon|paypal|apple\s+support|microsoft|netflix|chase|wells\s+fargo|bank\s+of\s+america|citi(bank)?|capital\s+one|toll\s+(services?|authority)|E-?ZPass|DMV)\b/gi,
+        /\b(fraud\s+(prevention|department|team)|security\s+(team|department)|account\s+services|customer\s+support\s+team)\b/gi,
+        /\b(dear\s+(customer|user|valued\s+(customer|member)|account\s+holder))\b/gi,
+        /\b(CEO|CFO|COO|president|director|your\s+manager)\b/gi,
+      ],
+    },
+    {
+      id: "too_good",
+      label: "Offers something too good to be true",
+      kind: "pressure",
+      weight: 14,
+      why: "Prizes, refunds you didn't expect and guaranteed returns are bait. Nobody gives away money to strangers by text.",
+      patterns: [
+        /\b(you('ve|\s+have)\s+won|winner|prize|congratulations|selected|unclaimed|reward)\b/gi,
+        /\b(guaranteed\s+(returns?|profits?|income)|risk[- ]free|double\s+your|passive\s+income|\d+%\s+(daily|weekly|returns?|profit))\b/gi,
+        /\b(i|we)\s+made\s+\$?[\d,]+/gi,
+        /\brefund\s+of\s+\$?[\d,]+/gi,
+      ],
+    },
+    {
+      id: "rapport",
+      label: "Builds rapport with a stranger",
+      kind: "pressure",
+      weight: 16,
+      why: "\"Wrong number\" openers and friendly strangers who bring up investing are how long-con romance and investment scams (often called pig butchering) begin. The ask comes weeks later.",
+      patterns: [
+        /\b(wrong\s+number|is\s+this\s+[A-Z][a-z]+\?|sorry,?\s+(i\s+)?(think\s+)?(i\s+)?(have|got)\s+the\s+wrong)\b/gi,
+        /\b(you\s+seem\s+(nice|kind|sweet)|nice\s+to\s+meet\s+you|it'?s\s+fate|meant\s+to\s+be)\b/gi,
+        /\b(my\s+(uncle|aunt|mentor|cousin|friend)\s+(taught|showed|introduced)\s+me)\b/gi,
+        /\b(crypto(currency)?\s+(trading|investing|investment)|bitcoin\s+trading)\b/gi,
+        /\b(trading\s+(strategy|platform|app|signals?)|investment\s+(platform|opportunity|app)|(i\s+)?can\s+(show|teach)\s+you)\b/gi,
+      ],
+    },
+    {
+      id: "secrecy",
+      label: "Asks for secrecy or moves you off-channel",
+      kind: "pressure",
+      weight: 16,
+      why: "Keeping it secret and moving to WhatsApp, Telegram or a personal number cuts you off from the people and systems that would catch the scam.",
+      patterns: [
+        /\b(keep\s+(this|it)\s+(between\s+us|quiet|confidential|private)|don'?t\s+tell|it'?s\s+a\s+surprise|confidential)\b/gi,
+        /\b(whats\s*app|telegram|signal\s+app|text\s+me\s+(at|on)|my\s+personal\s+(number|email))\b/gi,
+        /\b(i'?m\s+in\s+(a\s+)?meetings?|can'?t\s+talk|email\s+is\s+best|don'?t\s+call)\b/gi,
+        /\b(are\s+you\s+(available|free|at\s+your\s+desk)\??)\b/gi,
+      ],
+    },
+  ];
+
+  // Language that real services use to PROTECT you. Used to reduce false
+  // positives on genuine two-factor and security messages.
+  const PROTECTIVE = [
+    /\b(don'?t|do\s+not|never)\s+share\s+(this|the|your)\s+code\b/gi,
+    /\bwe\s+(will\s+)?never\s+(call|text|email|ask)\b/gi,
+    /\bif\s+you\s+didn'?t\s+request\s+this,?\s+(you\s+can\s+)?(ignore|disregard)\b/gi,
+  ];
+
+  const SHORTENERS = /^(bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|ow\.ly|rb\.gy|cutt\.ly|shorturl\.at|tiny\.cc)$/i;
+  const RISKY_TLDS = /\.(top|xyz|info|click|link|live|shop|online|site|icu|cyou|buzz|rest|support|help|vip|cc|tk|ml|ga|cf|gq)$/i;
+  const BRANDS = /(usps|ups|fedex|dhl|amazon|paypal|apple|icloud|microsoft|netflix|chase|wellsfargo|bankofamerica|citi|irs|ezpass|toll|coinbase|venmo|zelle)/i;
+  const OFFICIAL = /(^|\.)(usps\.com|ups\.com|fedex\.com|dhl\.com|amazon\.com|paypal\.com|apple\.com|microsoft\.com|netflix\.com|chase\.com|wellsfargo\.com|bankofamerica\.com|citi\.com|irs\.gov|e-zpassny\.com|coinbase\.com|venmo\.com|zellepay\.com)$/i;
+  const URL_RE = /\b((?:https?:\/\/|www\.)[^\s<>"')]+|(?:[a-z0-9-]+\.)+(?:com|net|org|gov|top|xyz|info|click|link|live|shop|online|site|icu|support|help|vip|cc|ly|co|io)(?:\/[^\s<>"')]*)?)/gi;
+
+  const ARCHETYPES = [
+    {
+      id: "codetheft",
+      name: "One-time code theft",
+      test: (h, ctx) => ctx.asksForCodeBack && (h.impersonation || h.urgency || h.threat),
+      floor: 85,
+      story: "someone posing as a trusted company asks you to read back or send a security code. That code is the key to your account, and no real company will ever ask for it",
+    },
+    {
+      id: "smish",
+      name: "Delivery / toll text scam",
+      test: (h, ctx) => h.link && ctx.brandLink && (h.urgency || h.threat),
+      floor: 76,
+      story: "it uses a fake delivery or toll problem with a deadline to get you onto a look-alike website",
+    },
+    {
+      id: "pig",
+      name: "Pig butchering opener (romance / investment long con)",
+      test: (h, ctx) => h.rapport && ctx.counts.rapport >= 2 && (h.odd_payment || h.too_good || h.secrecy),
+      floor: 66,
+      story: "a stranger starts a friendly chat, brings up investing or crypto profits, and tries to move you to another app. There's no ask yet — that's the point. The money request comes after weeks of trust-building",
+    },
+    {
+      id: "prize",
+      name: "Prize / refund bait",
+      test: (h) => h.too_good && (h.link || h.credentials || h.odd_payment),
+      floor: 70,
+      story: "it offers money or a prize you didn't expect and asks you to click, pay a fee or share details to claim it",
+    },
+    {
+      id: "bec",
+      name: "Invoice / payment redirect (business email compromise)",
+      test: (h) => h.payment_redirect && (h.urgency || h.secrecy || h.impersonation),
+      floor: 80,
+      story: "it asks you to send a payment to new account details and uses pressure or an authority figure to keep you from double-checking",
+    },
+    {
+      id: "giftcard",
+      name: "Gift card / boss impersonation",
+      test: (h) => h.odd_payment && (h.secrecy || h.impersonation || h.urgency),
+      floor: 82,
+      story: "it wants untraceable payment (gift cards, crypto or a cash app) and pairs it with secrecy or urgency",
+    },
+    {
+      id: "phish",
+      name: "Account phishing",
+      test: (h) => (h.credentials || h.link) && (h.threat || h.urgency) && (h.impersonation || h.link),
+      floor: 78,
+      story: "it claims to come from a trusted company, warns of a problem with a deadline, and asks you to log in or confirm details",
+    },
+  ];
+
+  function gradeDomain(raw) {
+    let host = raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split(/[\/?#:]/)[0].toLowerCase();
+    const reasons = [];
+    let bonus = 0;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) { reasons.push("raw IP address instead of a name"); bonus += 10; }
+    if (SHORTENERS.test(host)) { reasons.push("link shortener hides the real destination"); bonus += 8; }
+    if (RISKY_TLDS.test(host)) { reasons.push(`unusual ending (.${host.split(".").pop()})`); bonus += 8; }
+    const brandHit = BRANDS.test(host) && !OFFICIAL.test(host);
+    if (brandHit) { reasons.push("uses a brand name but isn't the brand's real domain"); bonus += 12; }
+    if (/[0-9]/.test(host.replace(/\.[a-z]+$/, "")) && BRANDS.test(host.replace(/0/g, "o").replace(/1/g, "l"))) {
+      reasons.push("swaps letters for look-alike numbers"); bonus += 10;
+    }
+    if ((host.match(/-/g) || []).length >= 2) { reasons.push("long hyphenated domain"); bonus += 4; }
+    const official = OFFICIAL.test(host);
+    return { host, reasons, bonus: official ? 0 : bonus, official, brandHit };
+  }
+
+  function collect(text, re) {
+    const out = [];
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text))) {
+      if (m[0].trim().length) out.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    return out;
+  }
+
+  function analyze(input) {
+    const text = String(input || "");
+    const hits = {};          // id -> true
+    const counts = {};        // id -> number of distinct matches
+    const flags = [];
+    const spans = [];
+    const asksForCodeBack = /\b(send|reply|read|tell|give)\b[^.]{0,30}\bcode\b/i.test(text) && !/\bphotos?\s+of\s+the\s+codes?\b/i.test(text);
+    const ctx = { counts, brandLink: false, links: [], asksForCodeBack };
+
+    for (const s of SIGNALS) {
+      let matches = [];
+      if (s.id === "link") {
+        for (const m of collect(text, URL_RE)) {
+          const g = gradeDomain(m.text);
+          ctx.links.push(g);
+          if (g.official) continue;
+          if (g.brandHit) ctx.brandLink = true;
+          matches.push({ ...m, note: g.reasons.length ? g.reasons.join("; ") : "unverified link", bonus: g.bonus });
+        }
+      } else {
+        for (const re of s.patterns) matches.push(...collect(text, re));
+      }
+      // de-duplicate overlapping matches within a signal
+      matches.sort((a, b) => a.start - b.start || b.end - a.end);
+      const uniq = [];
+      for (const m of matches) {
+        const last = uniq[uniq.length - 1];
+        if (last && m.start < last.end) continue;
+        uniq.push(m);
+      }
+      if (!uniq.length) continue;
+      hits[s.id] = true;
+      counts[s.id] = uniq.length;
+      const extra = Math.min(8, (uniq.length - 1) * 3) + Math.max(0, ...uniq.map((m) => m.bonus || 0));
+      const points = s.weight + extra;
+      flags.push({
+        id: s.id, label: s.label, kind: s.kind, why: s.why, points,
+        evidence: uniq.map((m) => m.text.trim()),
+        notes: uniq.map((m) => m.note).filter(Boolean),
+      });
+      for (const m of uniq) spans.push({ start: m.start, end: m.end, id: s.id });
+    }
+
+    const protective = PROTECTIVE.some((re) => collect(text, re).length > 0);
+    const askFlags = flags.filter((f) => f.kind === "ask");
+    const pressureFlags = flags.filter((f) => f.kind === "pressure");
+    const hasAsk = askFlags.length > 0;
+
+    let score = flags.reduce((a, f) => a + f.points, 0);
+    const adjustments = [];
+
+    // Combination bonus: an ask + pressure is the shape of almost every scam.
+    if (hasAsk && pressureFlags.length) {
+      const b = 8 + 4 * Math.min(3, pressureFlags.length - 1);
+      score += b;
+      adjustments.push({ type: "up", text: `Pairs a request with pressure (+${b}). That combination is the shape of most scams.` });
+    }
+
+    // Archetype detection (sets a floor so known patterns are never under-rated).
+    const archetype = ARCHETYPES.find((a) => a.test(hits, ctx)) || null;
+    if (archetype && score < archetype.floor) {
+      adjustments.push({ type: "up", text: `Matches a known scam pattern, so the score is raised to at least ${archetype.floor}.` });
+      score = archetype.floor;
+    }
+
+    // False-positive guard 1: no ask => cap.
+    if (!hasAsk && !archetype && score > 30) {
+      adjustments.push({ type: "down", text: "No request for money, information or clicks, so the score is capped at 30. Urgent or official-sounding language alone is normal in everyday messages." });
+      score = 30;
+    }
+
+    // False-positive guard 2: protective security language, no link, no ask to reply with code.
+    if (protective && !hits.link && !asksForCodeBack && !hits.payment_redirect && !hits.odd_payment) {
+      adjustments.push({ type: "down", text: "Contains protective wording (\"don't share this code\") with no link and no request to send the code back, which is how genuine security texts look. Score capped at 15." });
+      score = Math.min(score, 15);
+    }
+
+    score = Math.max(0, Math.min(99, Math.round(score)));
+    const rating = score >= 75 ? "Critical" : score >= 50 ? "High" : score >= 25 ? "Caution" : "Low";
+
+    // Plain-English explanation
+    let summary;
+    if (archetype) {
+      summary = `This matches the ${archetype.name.split(" (")[0].toLowerCase()} pattern: ${archetype.story}.`;
+    } else if (!flags.length) {
+      summary = "Nothing in this message matches common scam tactics. That's a good sign, but not a guarantee. If it asks you to do something unusual, verify with the sender through a channel you already trust.";
+    } else if (score < 25) {
+      summary = protective
+        ? "This reads like a genuine security message. It tells you not to share the code and doesn't ask you to click anything or reply with information."
+        : "There's some pressure language here, but no request for money, personal information or a click. On its own, that's ordinary everyday writing.";
+    } else {
+      const askTxt = askFlags.map((f) => f.label.toLowerCase()).join(" and ");
+      const prTxt = pressureFlags.map((f) => f.label.toLowerCase()).join(", ");
+      summary = hasAsk
+        ? `This message ${askTxt}${prTxt ? ` while it also ${prTxt}` : ""}. Treat it as suspicious until you verify it another way.`
+        : `This message ${prTxt}. There's no direct request yet, so stay alert if a follow-up asks for money or details.`;
+    }
+
+    const missing = [];
+    if (!hits.link) missing.push("no link");
+    if (!hits.credentials) missing.push("no request for codes or personal info");
+    if (!hits.payment_redirect && !hits.odd_payment) missing.push("no payment request");
+
+    const steps = nextSteps(rating, archetype, hits);
+
+    return {
+      score, rating, archetype: archetype ? archetype.name : null, summary,
+      flags: flags.sort((a, b) => b.points - a.points),
+      adjustments, spans, protective, missing, steps,
+      grammarNote: "Spelling and grammar are ignored on purpose. AI-written scams are fluent, so this engine scores what a message wants from you, not how well it's written.",
+    };
+  }
+
+  function nextSteps(rating, archetype, h) {
+    if (rating === "Low") return [
+      "No action needed if you were expecting this message.",
+      "If something still feels off, contact the sender using a number or address you already have.",
+    ];
+    const s = ["Don't reply, click links or call numbers in the message."];
+    if (h.payment_redirect) s.push("Call the vendor or colleague on a number you already have on file to confirm any bank change before paying.");
+    if (h.odd_payment) s.push("Never pay anyone with gift cards or crypto because they asked by message. No legitimate employer or agency requires it.");
+    if (h.credentials) s.push("Never share passwords, one-time codes or card numbers. If you already did, change your password and call your bank.");
+    if (h.link) s.push("Type the company's real website into your browser yourself, or use its official app, to check your account.");
+    if (archetype && archetype.id === "pig") s.push("Don't move the chat to another app, and be wary of any \"platform\" a new contact recommends.");
+    s.push("Report it: forward scam texts to 7726 (SPAM), and report fraud at reportfraud.ftc.gov. For business payment fraud or crypto losses, also file at ic3.gov.");
+    return s;
+  }
+
+  // Render the message with highlighted evidence. Returns safe HTML.
+  function highlight(text, spans) {
+    const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const sorted = [...spans].sort((a, b) => a.start - b.start || b.end - a.end);
+    let out = "", pos = 0;
+    for (const sp of sorted) {
+      if (sp.start < pos) continue; // skip overlaps; first (longest) wins
+      out += esc(text.slice(pos, sp.start));
+      out += `<mark class="hl hl-${sp.id}" data-flag="${sp.id}">${esc(text.slice(sp.start, sp.end))}</mark>`;
+      pos = sp.end;
+    }
+    return out + esc(text.slice(pos));
+  }
+
+  return { analyze, highlight, SIGNALS };
+});
+
+</script>
+<script>
+/* Sample messages. All fictional: names, numbers and domains are made up. */
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory();
+  else root.TellsSamples = factory();
+})(typeof self !== "undefined" ? self : this, function () {
+  return [
+    {
+      id: "invoice", label: "Fake invoice", expect: "Critical",
+      text: "Hi Dana, quick heads-up: our bank has changed, so please send payment for invoice #4471 ($18,450) to the new account below today.\n\nRouting: 021000089\nAccount: 7730021145\n\nI'm in meetings all afternoon so email is best.\nThanks,\nMark Ellison, CFO",
+    },
+    {
+      id: "polished", label: "AI-polished phish", expect: "Critical",
+      text: "Dear Customer,\n\nWe detected an unusual sign-in attempt on your account from a new device. To protect your funds, please confirm your identity within 24 hours using the secure link below. Failure to verify will result in a temporary suspension of online access.\n\nhttps://secure-account-review.info/verify\n\nThank you for banking with us.\nFraud Prevention Team",
+    },
+    {
+      id: "delivery", label: "Delivery text", expect: "Critical",
+      text: "USPS: Your package is on hold due to an incomplete address. Update within 12 hours or it will be returned to sender: https://usps-redeliver-help.top/track",
+    },
+    {
+      id: "pig", label: "\"Wrong number\" opener", expect: "High",
+      text: "Hi, is this Jessica? Sorry, I think I have the wrong number! You seem nice though 😊 I'm Lena, I work in finance in Seattle. My uncle taught me a crypto trading strategy and I made $8,200 last month. I can show you if you're curious. Easier to chat on WhatsApp.",
+    },
+    {
+      id: "giftcard", label: "Boss gift cards", expect: "Critical",
+      text: "Are you available? I need you to pick up 5 Apple gift cards ($200 each) for a client today. Keep this between us for now, it's a surprise. Send me photos of the codes when you have them. - Rob (CEO)",
+    },
+    {
+      id: "real2fa", label: "Real 2FA code", expect: "Low",
+      text: "Chase: Your verification code is 482913. Don't share this code with anyone. We will never call or text you asking for it.",
+    },
+    {
+      id: "friend", label: "Urgent friend", expect: "Low",
+      text: "Hey! Running late, the meeting got moved up. Can you grab the printed slides and head over ASAP? Thanks!!",
+    },
+  ];
+});
+
+</script>
+<script>
+(function(){
+  const $ = (s) => document.querySelector(s);
+  const ta = $("#msg"), out = $("#out");
+  const COLORS = { Low:"var(--low)", Caution:"var(--caution)", High:"var(--high)", Critical:"var(--critical)" };
+
+  const sbox = $("#samples");
+  TellsSamples.forEach((s) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.dataset.id = s.id;
+    b.innerHTML = s.label;
+    b.onclick = () => { ta.value = s.text; [...sbox.children].forEach(c=>c.classList.toggle("on", c===b)); run(); };
+    sbox.appendChild(b);
+  });
+
+  $("#go").onclick = run;
+  $("#clear").onclick = () => { ta.value = ""; [...sbox.children].forEach(c=>c.classList.remove("on")); out.innerHTML = $("#out").dataset.empty || out.innerHTML; ta.focus(); };
+  out.dataset.empty = out.innerHTML;
+  ta.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") run(); });
+  ta.addEventListener("input", () => [...sbox.children].forEach(c=>c.classList.remove("on")));
+
+  function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+  function run(){
+    const text = ta.value.trim();
+    if (!text){ ta.focus(); return; }
+    const r = Tells.analyze(text);
+    const col = COLORS[r.rating];
+    const C = 2 * Math.PI * 58;
+
+    const flagsHtml = r.flags.length ? r.flags.map((f, i) => `
+      <div class="flag" data-flag="${f.id}" style="--fc:var(--c-${f.id});animation-delay:${0.25 + i*0.09}s">
+        <div class="hd"><span>${esc(f.label)}</span><span class="pts">+${f.points}</span></div>
+        <div class="ev">${f.evidence.slice(0,4).map(e=>`<span>“${esc(e.length>48?e.slice(0,46)+"…":e)}”</span>`).join("")}${f.notes.length?`<em>${esc(f.notes[0])}</em>`:""}</div>
+        <p class="why">${esc(f.why)}</p>
+      </div>`).join("") : `<p class="summary">No red flags found.</p>`;
+
+    const adj = r.adjustments.length ? `
+      <div class="sec"><p class="label">Score adjustments</p><ul class="adj">${
+        r.adjustments.map(a=>`<li><span class="ar ${a.type}">${a.type==="up"?"↑":"↓"}</span><span>${esc(a.text)}</span></li>`).join("")
+      }</ul></div>` : "";
+
+    const whyNot = (r.rating === "Low" || r.rating === "Caution") && r.missing.length ? `
+      <div class="sec"><p class="label">Why it isn't rated higher</p><p class="summary">There's ${r.missing.join(", ")}. Scams almost always want one of these.</p></div>` : "";
+
+    out.innerHTML = `
+      <div class="top">
+        <div class="gauge" role="img" aria-label="Risk score ${r.score} out of 100">
+          <svg width="136" height="136" viewBox="0 0 136 136">
+            <circle cx="68" cy="68" r="58" fill="none" stroke="var(--line)" stroke-width="11"/>
+            <circle id="arc" cx="68" cy="68" r="58" fill="none" stroke="${col}" stroke-width="11" stroke-linecap="round"
+              stroke-dasharray="${C}" stroke-dashoffset="${C}" style="transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1)"/>
+          </svg>
+          <div class="num"><div><b id="n">0</b><small>risk / 100</small></div></div>
+        </div>
+        <div>
+          <span class="rating" style="background:${col}">${r.rating} risk</span>
+          <div class="archetype">${esc(r.archetype || (r.rating==="Low" ? "No scam pattern detected" : "Suspicious message"))}</div>
+          <p class="summary">${esc(r.summary)}</p>
+          <div class="grammar"><i>Aa</i> Grammar ignored: scored on intent, not typos</div>
+        </div>
+      </div>
+      <div class="sec"><p class="label">${r.rating==="Low"?"Signals found":"Red flags"} (${r.flags.length})</p><div class="flags">${flagsHtml}</div></div>
+      ${whyNot}
+      <div class="sec"><p class="label">Evidence in context</p><div class="msg" id="hl">${Tells.highlight(text, r.spans)}</div></div>
+      ${adj}
+      <div class="sec"><p class="label">What to do</p><ol class="steps">${r.steps.map(s=>`<li>${esc(s)}</li>`).join("")}</ol></div>`;
+
+    out.querySelectorAll("mark.hl").forEach(m => m.style.setProperty("--fc", `var(--c-${m.dataset.flag})`));
+    out.querySelectorAll(".flag").forEach(f => {
+      f.addEventListener("mouseenter", () => out.querySelectorAll("mark.hl").forEach(m => m.classList.toggle("dim", m.dataset.flag !== f.dataset.flag)));
+      f.addEventListener("mouseleave", () => out.querySelectorAll("mark.hl").forEach(m => m.classList.remove("dim")));
+    });
+
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      $("#arc").style.strokeDashoffset = C * (1 - r.score / 100);
+    }));
+    const n = $("#n"), t0 = performance.now(), D = 900;
+    (function tick(t){ const p = Math.min(1, (t - t0) / D); n.textContent = Math.round(r.score * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(tick); })(t0);
+    if (window.innerWidth <= 900) out.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+})();
+</script>
+</body>
+</html>
